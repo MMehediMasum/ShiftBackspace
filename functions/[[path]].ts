@@ -1,7 +1,11 @@
 export const onRequest: PagesFunction = async (context) => {
   const url = new URL(context.request.url);
 
-  if (url.hostname === "shiftbackspace.pages.dev") {
+  const isPagesDevHost =
+    url.hostname === "shiftbackspace.pages.dev" ||
+    url.hostname.endsWith(".shiftbackspace.pages.dev");
+
+  if (isPagesDevHost) {
     url.hostname = "shiftbackspace.com";
     url.protocol = "https:";
 
