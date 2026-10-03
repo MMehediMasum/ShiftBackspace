@@ -9,6 +9,7 @@ from markdownify import markdownify as html_to_markdown
  
 WXR_PATH = "wordpress-export.xml"
 BLOG_DIR = Path("src/content/blog")
+PAGE_DIR = Path("src/content/pages")
 AUTHORS_DIR = Path("src/content/authors")
 ERROR_LOG = Path("conversion-errors.json")
  
@@ -25,9 +26,10 @@ def slugify(text):
     text = re.sub(r"[^a-z0-9]+", "-", text)
     return text.strip("-") or "untitled"
  
- 
+
 def bing_query_slug(text):
     text = str(text or "").strip().lower()
+    text = re.sub(r"[^a-z0-9\s-]", "", text)  # strips %, ?, commas, periods, etc.
     text = re.sub(r"\s+", "-", text)
     return text
  
@@ -135,14 +137,16 @@ def main():
     items = channel.findall("item")
  
     BLOG_DIR.mkdir(parents=True, exist_ok=True)
+    PAGE_DIR.mkdir(parents=True, exist_ok=True)
     AUTHORS_DIR.mkdir(parents=True, exist_ok=True)
+
+    items_to_convert = [
+    item for item in items
+    if (item.find("wp:post_type", NS) is not None and item.find("wp:post_type", NS).text in ["post", "page"])
+    and (item.find("wp:status", NS) is not None and item.find("wp:status", NS).text == "publish")
+]
+    print(f"Found {len(items_to_convert)} published posts and pages.")
  
-    posts = [
-        item for item in items
-        if (item.find("wp:post_type", NS) is not None and item.find("wp:post_type", NS).text == "post")
-        and (item.find("wp:status", NS) is not None and item.find("wp:status", NS).text == "publish")
-    ]
-    print(f"Found {len(posts)} published posts.")
  
     authors_seen = {}
     converted = 0
@@ -150,9 +154,10 @@ def main():
     info_count = 0
     errors = []
  
-    for i, item in enumerate(posts, 1):
+    for i, item in enumerate(items_to_convert, 1):
         slug = "unknown"
         try:
+            post_type = item.find("wp:post_type", NS).text
             title_el = item.find("title")
             title = html.unescape((title_el.text or "Untitled").strip()) if title_el is not None else "Untitled"
  
@@ -209,11 +214,12 @@ def main():
             ]
  
             file_content = "\n".join(frontmatter_lines) + "\n\n" + markdown_body.strip() + "\n"
-            (BLOG_DIR / f"{slug}.md").write_text(file_content, encoding="utf-8")
+            target_dir = BLOG_DIR if post_type == "post" else PAGE_DIR
+            (target_dir / f"{slug}.md").write_text(file_content, encoding="utf-8")
             converted += 1
  
             if i % 250 == 0:
-                print(f"Progress: {i}/{len(posts)}")
+                print(f"Progress: {i}/{len(items_to_convert)}")
  
         except Exception as e:
             errors.append({"slug": slug, "error": str(e)})
